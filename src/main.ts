@@ -198,16 +198,16 @@ function checkReminders(flags: FeatureFlags): void {
       const soon = dueSoon(bills.filter(b => b.reminderEnabled), 3);
       if (soon.length > 0) {
         const names = soon.map(s => s.bill.name).join(', ');
-        showBanner(`${soon.length} bill${soon.length === 1 ? '' : 's'} due soon: ${names}`, 'reminder');
+        showBanner(`${soon.length} bill${soon.length === 1 ? '' : 's'} due soon: ${names}`);
       }
     }
 
   })();
 }
 
-function showBanner(msg: string, kind: 'reminder'): void {
+function showBanner(msg: string): void {
   const banner = document.createElement('div');
-  banner.className = `backup-banner ${kind}`;
+  banner.className = 'app-banner';
   banner.innerHTML = `
     <span>${icon('clock', { size: 16, className: 'banner-icon' })}${msg}</span>
     <button class="banner-close" title="Dismiss">${icon('close', { size: 16 })}</button>`;

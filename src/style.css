@@ -838,14 +838,6 @@ html, body {
 }
 .section-icon svg { display: block; }
 
-.inline-icon {
-  display: inline-flex;
-  align-items: center;
-  vertical-align: -0.15em;
-  margin-right: 6px;
-}
-.inline-icon svg { display: block; }
-
 .reminder-dot {
   display: inline-flex;
   align-items: center;
@@ -998,13 +990,13 @@ html, body {
   text-decoration: none;
 }
 
-/* ── Backup Banner ───────────────────────────────────────────────────────── */
-.backup-banner {
+/* ── Reminder Banner ─────────────────────────────────────────────────────── */
+.app-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: color-mix(in srgb, #f59e0b 20%, var(--surface));
-  border-bottom: 1px solid #f59e0b;
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+  border-bottom: 1px solid var(--accent);
   padding: 10px 16px;
   font-size: 13px;
   font-weight: 500;
@@ -1362,11 +1354,6 @@ html, body {
 /* Position the app shell so the more-menu anchors correctly */
 .app-shell { position: relative; }
 
-.backup-banner.reminder {
-  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
-  border-bottom-color: var(--accent);
-}
-
 /* ── Tappable category rows + quick-add ──────────────────────────────────── */
 .legend-item.tappable,
 .unbudgeted-item.tappable { cursor: pointer; transition: border-color 0.15s; }
@@ -1452,6 +1439,13 @@ html, body {
 
 
 /* ── Statement import ─────────────────────────────────────────────────────── */
+.import-range-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.import-range-note:empty { display: none; }
 .import-status {
   margin-top: 10px;
   font-size: 13px;

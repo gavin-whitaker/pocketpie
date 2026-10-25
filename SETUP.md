@@ -8,45 +8,36 @@ This guide is written for non-developers. Follow it step-by-step and you'll have
 
 - A Mac or PC (just to do a one-time deploy)
 - An iPhone with Safari
-- A free account on **Netlify** or **GitHub Pages** (both are free forever for this kind of app)
+- A free **GitHub** account (holds the code) and a free **Netlify** account (hosts the app)
 
 ---
 
-## Step 1 — Build the app
+## Step 1 — Run it locally (optional)
 
 If you have Node.js installed, open a terminal and run:
 
 ```
 cd pocketpie
 npm install
-npm run build
+npm run dev
 ```
 
-This creates a `dist/` folder with the finished app. That folder is all you need.
+`npm run build` creates the production `dist/` folder — Netlify runs this for you.
 
 ---
 
-## Step 2 — Put it on the internet (one-time only)
+## Step 2 — Deploy with Netlify (one-time setup)
 
-You need HTTPS for the service worker to work on iPhone. The easiest free way:
+You need HTTPS for the service worker to work on iPhone. Netlify provides it for free.
 
-### Option A — Netlify (recommended, takes 2 minutes)
+1. Push the `pocketpie` repo to GitHub.
+2. In [Netlify](https://app.netlify.com), choose **Add new site → Import an existing project** and pick the repo.
+3. Netlify reads `netlify.toml` automatically (build command `npm run build`, publish folder `dist`). Click **Deploy**.
+4. Netlify gives you a URL like `https://pocketpie.netlify.app`. That's your app!
 
-1. Go to [netlify.com](https://netlify.com) and create a free account.
-2. After logging in, look for a box that says **"Drag and drop your site folder here"**.
-3. Open your `pocketpie/dist/` folder on your computer.
-4. Drag the entire `dist` folder onto that Netlify box.
-5. Netlify gives you a URL like `https://abc123.netlify.app`. That's your app!
+Every `git push` to `main` redeploys automatically. The installed app picks up the new version the next time you open it with a connection.
 
-### Option B — GitHub Pages
-
-1. Create a GitHub account at [github.com](https://github.com).
-2. Create a new repository (click the `+` button).
-3. Upload all the files inside `dist/` to the repository root.
-4. Go to repository Settings → Pages → Source → select "main branch".
-5. GitHub gives you a URL like `https://yourusername.github.io/repo-name`.
-
-> **Important:** After you install the app to your iPhone (Step 3), it runs **fully offline**. You don't need Netlify or GitHub anymore. You can even take the site down later. The app lives on your phone.
+> **Important:** After you install the app to your iPhone (Step 3), it runs **fully offline**. The site only matters for installing and receiving updates. Your data lives on your phone.
 
 ---
 
@@ -65,18 +56,22 @@ PocketPie now appears on your home screen with its own icon. Tap it — it opens
 
 ---
 
-## Step 4 — Back up your data regularly (IMPORTANT)
+## Step 4 — Import your bank statements
 
-⚠️ **iOS can delete your app's data** if you don't open the app for about 7 days, or if you clear Safari's data. There is no way around this limitation for free, offline iPhone apps.
+1. Download a CSV of transactions from your bank / card app and save it to **Files**.
+2. Open PocketPie → **Settings** → **Import statements**.
+3. Pick the **Month to import** (defaults to the current month; choose an earlier month to back-fill).
+4. Tap **Credit card CSV** or **Debit card CSV** and choose the file.
 
-**What to do:** Export your data regularly and save it to iCloud Drive or Files.
+What happens:
 
-1. Open PocketPie → tap **Settings** (⚙️ tab).
-2. Tap **Export JSON**.
-3. A file download will start. Save it to your **iCloud Drive** or **Files** app.
-4. To restore later: tap **Import JSON / CSV** and pick your backup file.
+- Only purchases inside the selected budget month are added (pending charges included).
+- Payments, refunds, fees, declined charges, and deposits are skipped.
+- On debit statements, credit card payoffs and transfers between your own accounts are skipped — those purchases already come in from the credit card CSV.
+- Known stores (Walmart, Maverik, McDonald's, …) are categorized automatically. Anything else shows up in a short review list where you pick a category before confirming.
+- Importing the same file twice is safe: duplicates are skipped.
 
-**How often?** Export whenever you'd be sad to lose the data. Once a week is a good habit. The app will remind you if it's been more than 7 days since your last export.
+⚠️ **iOS can delete app data** if you don't open the app for a long time, or if you clear Safari's data. Open PocketPie regularly. Because your bank keeps the statements, you can always re-import a month if needed.
 
 ---
 
@@ -84,7 +79,7 @@ PocketPie now appears on your home screen with its own icon. Tap it — it opens
 
 PocketPie starts simple. Extra tools are hidden until you want them.
 
-1. Open PocketPie → tap **Settings** (⚙️).
+1. Open PocketPie → tap **Settings**.
 2. Find the **Features** section near the top.
 3. Flip on any of: **Savings Goals**, **Bills & Reminders**, **Insights**, **Tithing**.
 
@@ -119,7 +114,10 @@ Now you can say "Hey Siri, Log expense" and PocketPie will open with that catego
 → Scroll down further in the Share sheet. It's below the app suggestions.
 
 **I lost my data**
-→ Import your most recent `.json` backup file from iCloud Drive / Files. If you have no backup, the data is gone — this is why exporting regularly is so important.
+→ Re-import each month's credit and debit CSVs (Settings → Import statements, pick the month). Manually added entries can't be recovered.
+
+**An import says "outside this month" for everything**
+→ Check the **Month to import** picker — it needs to match the dates in the CSV.
 
 **The donut chart looks wrong after adding transactions**
 → Tap the Dashboard tab again to refresh.
@@ -131,7 +129,7 @@ Now you can say "Hey Siri, Log expense" and PocketPie will open with that catego
 | Data | Where |
 |------|-------|
 | Transactions, categories, settings | On your iPhone only (IndexedDB in Safari) |
-| Backup files | Wherever you save them (iCloud Drive recommended) |
-| App code | On Netlify/GitHub Pages (can be deleted after install; app still works) |
+| Statement CSVs | Read on your phone during import; never uploaded |
+| App code | GitHub (source) and Netlify (hosting) |
 
 No servers. No accounts. No cloud sync. Your data is 100% yours.

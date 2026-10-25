@@ -6,7 +6,6 @@ export type Transaction = {
   note?: string;
   date: string;       // "YYYY-MM-DD"
   createdAt: string;  // ISO timestamp
-  recurringId?: string;
   sourceId?: string;  // links auto-generated tx (e.g. auto-tithe) back to its source
   importKey?: string; // fingerprint from statement import (dedupe on re-import)
 };
@@ -24,9 +23,6 @@ export type Settings = {
   currencySymbol: string;
   monthStartDay: number;
   theme: 'system' | 'light' | 'dark';
-  pinEnabled: boolean;
-  pinHash?: string;
-  lastExportAt?: string;
   // Feature toggles (all default OFF so existing users see no change)
   goalsEnabled: boolean;
   billsEnabled: boolean;
@@ -34,16 +30,6 @@ export type Settings = {
   tithingEnabled: boolean;
   tithePercentage: number;   // default 10
   titheAutoAdd: boolean;     // default false
-};
-
-export type RecurringRule = {
-  id: string;
-  amount: number;
-  type: 'expense' | 'income';
-  category: string;
-  note?: string;
-  dayOfMonth: number;
-  active: boolean;
 };
 
 export type Goal = {

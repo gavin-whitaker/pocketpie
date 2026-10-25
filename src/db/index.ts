@@ -1,7 +1,7 @@
 import { openDB } from 'idb';
 import type { DBSchema, IDBPDatabase } from 'idb';
 import type {
-  Transaction, Category, Settings, RecurringRule, Goal, Bill, FeatureFlags
+  Transaction, Category, Settings, Goal, Bill, FeatureFlags
 } from '../types';
 
 interface PocketPieDB extends DBSchema {
@@ -19,9 +19,10 @@ interface PocketPieDB extends DBSchema {
     key: string;
     value: { key: string; value: unknown };
   };
+  // Unused since v1; kept so existing databases don't need a destructive upgrade.
   recurring: {
     key: string;
-    value: RecurringRule;
+    value: unknown;
   };
   goals: {
     key: string;
@@ -177,9 +178,6 @@ export async function getAllSettings(): Promise<Settings> {
     currencySymbol: result.currencySymbol ?? '$',
     monthStartDay: result.monthStartDay ?? 1,
     theme: result.theme ?? 'system',
-    pinEnabled: result.pinEnabled ?? false,
-    pinHash: result.pinHash,
-    lastExportAt: result.lastExportAt,
     goalsEnabled: result.goalsEnabled ?? false,
     billsEnabled: result.billsEnabled ?? false,
     insightsEnabled: result.insightsEnabled ?? false,
@@ -237,7 +235,6 @@ export async function seedDefaults(): Promise<void> {
     await setSetting('currencySymbol', '$');
     await setSetting('monthStartDay', 1);
     await setSetting('theme', 'system');
-    await setSetting('pinEnabled', false);
   }
 }
 

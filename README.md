@@ -7,12 +7,13 @@ A personal, offline budgeting PWA for iPhone. No accounts. No server. No interne
 - **Budget donut dashboard** — the ring is sized by each category's monthly budget. The bright part of each slice fills up as you spend; the dim part is what's left. Over budget turns red.
 - **Per-category budgets** — set a monthly budget per category in Settings; the legend shows `spent / budget` with a progress bar.
 - **Budget-vs-actual strip** — total Budget / Spent / Left at the top of the dashboard.
+- **Statement import** — import a credit or debit card CSV for any of the last 12 budget months. Known stores are auto-categorized, unknown ones go to a quick review list, transfers/card payoffs are skipped, and re-imports skip duplicates.
+- **Income tracking** — income is shown separately and never counted in spending.
 - **Fast expense entry** — add a transaction in about 3 taps.
 - **Transaction history** — browse and search past months. Edit or delete any entry.
 - **Custom categories** — add, rename, recolor, and archive categories.
 - **Month navigation** — flip between months on any screen.
 - **Light & dark themes** — follows system preference, or set manually.
-- **JSON and CSV backup/restore** — keep your data safe in iCloud Drive.
 - **100% offline** — works in airplane mode after one-time install.
 - **iOS home screen installable** — open in Safari → Share → Add to Home Screen. Free, no App Store.
 
@@ -31,7 +32,7 @@ When more than one optional feature is enabled, the extra tabs collapse into a *
 
 See [SETUP.md](SETUP.md) for step-by-step installation instructions written for non-developers.
 
-**TL;DR:** Deploy the `dist/` folder to Netlify (free), open the URL in iPhone Safari, Share → Add to Home Screen.
+**TL;DR:** Connect this repo to Netlify (it uses `netlify.toml`; every push to `main` redeploys), open the URL in iPhone Safari, Share → Add to Home Screen.
 
 ## Tech Stack
 
@@ -51,7 +52,7 @@ Zero server dependencies. Zero runtime network calls.
 | Reading purchase push notifications | iOS doesn't allow any app to read another app's notifications. Impossible. |
 | App Store distribution | Apple rejects "repackaged website" PWAs. Home-screen install is the correct, free path. |
 
-The fast manual entry + optional Siri Shortcut (see SETUP.md) is the recommended capture strategy.
+Statement CSV import plus fast manual entry (and the optional Siri Shortcut in SETUP.md) is the recommended capture strategy.
 
 ### Honest limitations of optional features
 

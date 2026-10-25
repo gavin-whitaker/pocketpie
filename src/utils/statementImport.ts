@@ -1,14 +1,12 @@
 import type { Transaction } from '../types';
-import { currentYearMonth, getMonthRange } from './dates';
 
 /** A parsed statement row ready to become a Transaction (or wait for category review). */
 export type ParsedStatementRow = {
   date: string;
   amount: number;
   note: string;
-  category: string | null; // null = needs user review (credit only)
+  category: string | null; // null = needs user review
   importKey: string;
-  mapped: boolean;
 };
 
 export type StatementPrepareResult = {
@@ -17,7 +15,10 @@ export type StatementPrepareResult = {
   skippedDuplicates: number;
   skippedOutOfRange: number;
   skippedFiltered: number;
+  skippedTransfers: number;
 };
+
+export type DateRange = { startDate: string; endDate: string };
 
 // ── CSV helpers ──────────────────────────────────────────────────────────────
 
@@ -82,7 +83,7 @@ function cell(row: string[], map: Record<string, number>, name: string): string 
   return (row[idx] ?? '').trim();
 }
 
-// ── Vendor categorization (credit) ───────────────────────────────────────────
+// ── Vendor categorization ────────────────────────────────────────────
 
 function normalizeMerchant(raw: string): string {
   let m = raw.toUpperCase().replace(/['']/g, "'").replace(/"/g, '');
@@ -181,18 +182,10 @@ export function existingImportKeys(transactions: Transaction[]): Set<string> {
   return keys;
 }
 
-// ── Budget month filter ──────────────────────────────────────────────────────
+// ── Shared helpers ───────────────────────────────────────────────────────────
 
-export function getCurrentBudgetRange(monthStartDay: number): {
-  startDate: string;
-  endDate: string;
-} {
-  const { year, month } = currentYearMonth();
-  return getMonthRange(year, month, monthStartDay);
-}
-
-function inRange(date: string, startDate: string, endDate: string): boolean {
-  return date >= startDate && date <= endDate;
+function inRange(date: string, range: DateRange): boolean {
+  return date >= range.startDate && date <= range.endDate;
 }
 
 function emptyResult(): StatementPrepareResult {
@@ -202,18 +195,25 @@ function emptyResult(): StatementPrepareResult {
     skippedDuplicates: 0,
     skippedOutOfRange: 0,
     skippedFiltered: 0,
+    skippedTransfers: 0,
   };
+}
+
+function addCategorized(result: StatementPrepareResult, row: ParsedStatementRow): void {
+  if (row.category === null) result.needsReview.push(row);
+  else result.ready.push(row);
 }
 
 // ── Credit statement ─────────────────────────────────────────────────────────
 
 export function prepareCreditImport(
   csvText: string,
-  monthStartDay: number,
+  range: DateRange,
   existingKeys: Set<string>
 ): StatementPrepareResult {
+  const result = emptyResult();
   const rows = parseCsv(csvText);
-  if (rows.length < 2) return emptyResult();
+  if (rows.length < 2) return result;
 
   const map = headerMap(rows[0]);
   for (const required of ['date', 'time', 'amount', 'type', 'merchant']) {
@@ -221,13 +221,6 @@ export function prepareCreditImport(
       throw new Error('Not a credit card statement. Expected columns: Date, Time, Amount, Type, Merchant.');
     }
   }
-
-  const { startDate, endDate } = getCurrentBudgetRange(monthStartDay);
-  const ready: ParsedStatementRow[] = [];
-  const needsReview: ParsedStatementRow[] = [];
-  let skippedDuplicates = 0;
-  let skippedOutOfRange = 0;
-  let skippedFiltered = 0;
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
@@ -240,74 +233,79 @@ export function prepareCreditImport(
     const status = cell(row, map, 'status');
 
     if (!date || !amountRaw) {
-      skippedFiltered++;
+      result.skippedFiltered++;
       continue;
     }
 
     // Purchases only (Posted or Pending). Skip Payment, Refund, Fee, Other, Declined.
-    if (type.toLowerCase() !== 'purchase') {
-      skippedFiltered++;
-      continue;
-    }
-    if (status.toLowerCase() === 'declined') {
-      skippedFiltered++;
+    if (type.toLowerCase() !== 'purchase' || status.toLowerCase() === 'declined') {
+      result.skippedFiltered++;
       continue;
     }
 
-    if (!inRange(date, startDate, endDate)) {
-      skippedOutOfRange++;
+    if (!inRange(date, range)) {
+      result.skippedOutOfRange++;
       continue;
     }
 
     const amount = Math.abs(parseFloat(amountRaw));
     if (isNaN(amount) || amount === 0) {
-      skippedFiltered++;
+      result.skippedFiltered++;
       continue;
     }
 
     const importKey = creditImportKey(date, time, amount);
     if (existingKeys.has(importKey)) {
-      skippedDuplicates++;
+      result.skippedDuplicates++;
       continue;
     }
 
-    const category = applyVendorCategory(merchant);
-    const parsed: ParsedStatementRow = {
+    addCategorized(result, {
       date,
       amount,
       note: merchant || description || 'Purchase',
-      category,
+      category: applyVendorCategory(merchant),
       importKey,
-      mapped: category !== null,
-    };
-
-    if (category === null) needsReview.push(parsed);
-    else ready.push(parsed);
+    });
   }
 
-  return { ready, needsReview, skippedDuplicates, skippedOutOfRange, skippedFiltered };
+  return result;
 }
 
 // ── Debit statement ──────────────────────────────────────────────────────────
 
+const CARD_PURCHASE_PREFIX = /^DEBIT CARD TRANSACTION AT\s+/i;
+const CARD_ISSUERS = /APPLECARD|APPLE CARD|CAPITAL ONE|CHASE|DISCOVER|AMEX|AMERICAN EXPRESS|CITI|ROBINHOOD|SYNCHRONY|BARCLAY/i;
+
+/**
+ * Transfers between your own accounts and credit card payoffs. The card's purchases
+ * are already imported from the credit statement, so counting these would double-count.
+ */
+function isTransferOrCardPayment(description: string): boolean {
+  const d = description.toUpperCase();
+  if (d.includes('TRANSFER')) return true;
+  return CARD_ISSUERS.test(d) && /PAYMENT|PMT|AUTOPAY/.test(d);
+}
+
+/** "Debit Card Transaction at SQ *CRAZY IGUANA      SHERIDAN  WY" → "SQ *CRAZY IGUANA" */
+function debitMerchantName(description: string): string {
+  const withoutPrefix = description.replace(CARD_PURCHASE_PREFIX, '');
+  return withoutPrefix.split(/\s{3,}/)[0].trim() || description.trim();
+}
+
 export function prepareDebitImport(
   csvText: string,
-  monthStartDay: number,
+  range: DateRange,
   existingKeys: Set<string>
 ): StatementPrepareResult {
+  const result = emptyResult();
   const rows = parseCsv(csvText);
-  if (rows.length < 2) return emptyResult();
+  if (rows.length < 2) return result;
 
   const map = headerMap(rows[0]);
   if (map['date'] === undefined || map['amount'] === undefined || map['description'] === undefined) {
     throw new Error('Not a debit card statement. Expected columns: Date, Description, Amount.');
   }
-
-  const { startDate, endDate } = getCurrentBudgetRange(monthStartDay);
-  const ready: ParsedStatementRow[] = [];
-  let skippedDuplicates = 0;
-  let skippedOutOfRange = 0;
-  let skippedFiltered = 0;
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
@@ -316,51 +314,45 @@ export function prepareDebitImport(
     const amountRaw = cell(row, map, 'amount');
 
     if (!date || !amountRaw) {
-      skippedFiltered++;
+      result.skippedFiltered++;
       continue;
     }
 
+    // Outflows only (negative). Skip payroll / deposits.
     const signed = parseFloat(amountRaw);
-    if (isNaN(signed)) {
-      skippedFiltered++;
+    if (isNaN(signed) || signed >= 0) {
+      result.skippedFiltered++;
       continue;
     }
 
-    // Outflows only (negative). Skip payroll / income.
-    if (signed >= 0) {
-      skippedFiltered++;
+    if (!inRange(date, range)) {
+      result.skippedOutOfRange++;
       continue;
     }
 
-    if (!inRange(date, startDate, endDate)) {
-      skippedOutOfRange++;
+    if (isTransferOrCardPayment(description)) {
+      result.skippedTransfers++;
       continue;
     }
 
     const amount = Math.abs(signed);
     const importKey = debitImportKey(date, amount, description);
     if (existingKeys.has(importKey)) {
-      skippedDuplicates++;
+      result.skippedDuplicates++;
       continue;
     }
 
-    ready.push({
+    const merchant = debitMerchantName(description);
+    addCategorized(result, {
       date,
       amount,
-      note: description || 'Debit purchase',
-      category: 'Other',
+      note: merchant || 'Debit purchase',
+      category: applyVendorCategory(merchant),
       importKey,
-      mapped: true,
     });
   }
 
-  return {
-    ready,
-    needsReview: [],
-    skippedDuplicates,
-    skippedOutOfRange,
-    skippedFiltered,
-  };
+  return result;
 }
 
 /** Convert a finalized parsed row into a Transaction ready for IndexedDB. */

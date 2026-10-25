@@ -11,6 +11,7 @@ import {
 } from '../db';
 import { setTheme } from '../utils/theme';
 import { icon } from '../utils/icons';
+import { currentYearMonth, prevMonth, getMonthRange, formatMonthLabel, formatDate } from '../utils/dates';
 import {
   prepareCreditImport,
   prepareDebitImport,
@@ -19,13 +20,55 @@ import {
   type ParsedStatementRow,
 } from '../utils/statementImport';
 
+const IMPORT_MONTHS_BACK = 12;
+
 let onChangeCallback: (() => void) | null = null;
 
 let pendingReview: {
   ready: ParsedStatementRow[];
   needsReview: ParsedStatementRow[];
   skippedDuplicates: number;
+  skippedTransfers: number;
 } | null = null;
+
+/** Budget month selected for statement import; null means the current month. */
+let importMonth: { year: number; month: number } | null = null;
+
+function selectedImportMonth(): { year: number; month: number } {
+  return importMonth ?? currentYearMonth();
+}
+
+function monthValue(ym: { year: number; month: number }): string {
+  return `${ym.year}-${String(ym.month).padStart(2, '0')}`;
+}
+
+function importMonthOptions(): string {
+  const selected = monthValue(selectedImportMonth());
+  let ym = currentYearMonth();
+  const options: string[] = [];
+  for (let i = 0; i < IMPORT_MONTHS_BACK; i++) {
+    const value = monthValue(ym);
+    const label = formatMonthLabel(ym.year, ym.month) + (i === 0 ? ' (current)' : '');
+    options.push(`<option value="${value}"${value === selected ? ' selected' : ''}>${label}</option>`);
+    ym = prevMonth(ym.year, ym.month);
+  }
+  return options.join('');
+}
+
+function importRangeNote(monthStartDay: number): string {
+  if (monthStartDay === 1) return '';
+  const { year, month } = selectedImportMonth();
+  const { startDate, endDate } = getMonthRange(year, month, monthStartDay);
+  return `${formatDate(startDate)} – ${formatDate(endDate)}`;
+}
+
+function importSummary(added: number, duplicates: number, transfers: number, outOfRange = 0): string {
+  const { year, month } = selectedImportMonth();
+  const parts = [`Added ${added} to ${formatMonthLabel(year, month)}`, `${duplicates} duplicates skipped`];
+  if (transfers) parts.push(`${transfers} transfers/card payments skipped`);
+  if (outOfRange) parts.push(`${outOfRange} outside this month`);
+  return parts.join(' · ');
+}
 
 export function setOnChange(cb: () => void): void {
   onChangeCallback = cb;
@@ -111,7 +154,12 @@ function buildHTML(categories: Category[], settings: Settings): string {
           <span class="section-icon">${icon('save', { size: 18 })}</span>
           <h3>Import statements</h3>
         </div>
-        <p class="section-note">Import this budget month's purchases from a bank CSV. Re-imports skip duplicates automatically.</p>
+        <p class="section-note">Import one budget month's purchases from a bank CSV. Re-imports skip duplicates automatically.</p>
+        <div class="field-group">
+          <label class="field-label" for="import-month-select">Month to import</label>
+          <select class="text-input" id="import-month-select">${importMonthOptions()}</select>
+          <span class="import-range-note" id="import-range-note">${importRangeNote(settings.monthStartDay)}</span>
+        </div>
         <div class="btn-row">
           <button type="button" class="btn-primary" id="import-credit-btn">Credit card CSV</button>
           <button type="button" class="btn-secondary" id="import-debit-btn">Debit card CSV</button>
@@ -270,18 +318,17 @@ function bindReviewEvents(container: HTMLElement): void {
       return {
         ...row,
         category: select?.value || 'Other',
-        mapped: true,
       };
     });
 
-    const skipped = pendingReview.skippedDuplicates;
+    const { skippedDuplicates, skippedTransfers } = pendingReview;
     const added = await saveRows([...pendingReview.ready, ...reviewed]);
     pendingReview = null;
 
     const reviewEl = container.querySelector('#import-review');
     if (reviewEl) reviewEl.innerHTML = '';
 
-    setImportStatus(container, `Added ${added} · Skipped ${skipped} duplicates`);
+    setImportStatus(container, importSummary(added, skippedDuplicates, skippedTransfers));
     onChangeCallback?.();
   });
 }
@@ -295,27 +342,27 @@ async function handleStatementFile(
 ): Promise<void> {
   const text = await file.text();
   const existing = existingImportKeys(await getAllTransactions());
-  const monthStart = settings.monthStartDay ?? 1;
+  const { year, month } = selectedImportMonth();
+  const range = getMonthRange(year, month, settings.monthStartDay ?? 1);
 
   let result;
   try {
     result = kind === 'credit'
-      ? prepareCreditImport(text, monthStart, existing)
-      : prepareDebitImport(text, monthStart, existing);
+      ? prepareCreditImport(text, range, existing)
+      : prepareDebitImport(text, range, existing);
   } catch (e) {
     setImportStatus(container, e instanceof Error ? e.message : 'Import failed.', true);
     return;
   }
 
-  if (kind === 'debit' || result.needsReview.length === 0) {
+  if (result.needsReview.length === 0) {
     const added = await saveRows(result.ready);
     pendingReview = null;
     const reviewEl = container.querySelector('#import-review');
     if (reviewEl) reviewEl.innerHTML = '';
     setImportStatus(
       container,
-      `Added ${added} · Skipped ${result.skippedDuplicates} duplicates` +
-        (result.skippedOutOfRange ? ` · ${result.skippedOutOfRange} outside this month` : '')
+      importSummary(added, result.skippedDuplicates, result.skippedTransfers, result.skippedOutOfRange)
     );
     onChangeCallback?.();
     return;
@@ -325,6 +372,7 @@ async function handleStatementFile(
     ready: result.ready,
     needsReview: result.needsReview,
     skippedDuplicates: result.skippedDuplicates,
+    skippedTransfers: result.skippedTransfers,
   };
 
   const reviewEl = container.querySelector('#import-review');
@@ -449,6 +497,15 @@ function bindEvents(
       order: categories.length,
     });
     await renderSettings(container);
+  });
+
+  container.querySelector('#import-month-select')?.addEventListener('change', e => {
+    const [y, m] = (e.target as HTMLSelectElement).value.split('-').map(Number);
+    const current = currentYearMonth();
+    importMonth = y === current.year && m === current.month ? null : { year: y, month: m };
+    const note = container.querySelector('#import-range-note');
+    if (note) note.textContent = importRangeNote(settings.monthStartDay);
+    setImportStatus(container, '');
   });
 
   const creditFile = container.querySelector('#import-credit-file') as HTMLInputElement;

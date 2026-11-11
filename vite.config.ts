@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/*.png'],
+      includeAssets: ['icons/*.png', 'static/og-image.png'],
       manifest: {
         name: 'PocketPie',
         short_name: 'PocketPie',
